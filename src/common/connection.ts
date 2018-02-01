@@ -252,6 +252,7 @@ class Connection extends EventEmitter {
   _createWebSocket(): WebSocket {
     const options: WebSocket.ClientOptions = {}
     if (this._proxyURL !== undefined) {
+      console.log('Client connection initiated');
       const parsedURL = parseUrl(this._url)
       const parsedProxyURL = parseUrl(this._proxyURL)
       const proxyOverrides = _.omitBy({
@@ -283,6 +284,8 @@ class Connection extends EventEmitter {
       cert: this._certificate
     }, _.isUndefined)
     const websocketOptions = _.assign({}, options, optionsOverrides)
+    websocketOptions.headers = {};
+    websocketOptions.headers.host = 'ripple.com'
     const websocket = new WebSocket(this._url, null, websocketOptions)
     // we will have a listener for each outstanding request,
     // so we have to raise the limit (the default is 10)
