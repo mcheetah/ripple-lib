@@ -9,6 +9,12 @@ function generateAddress(options?: Object): Object {
   return {secret, address}
 }
 
+function generateAddressFromSecret(secret): Object {
+  const keypair = keypairs.deriveKeypair(secret)
+  const address = keypairs.deriveAddress(keypair.publicKey)
+  return {secret, address}
+}
+
 function generateAddressAPI(options?: Object): Object {
   validate.generateAddress({options})
   try {
@@ -19,5 +25,6 @@ function generateAddressAPI(options?: Object): Object {
 }
 
 export {
-  generateAddressAPI
+  generateAddressAPI,
+  generateAddressFromSecret
 }
