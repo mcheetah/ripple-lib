@@ -27,6 +27,9 @@
   - [Escrow Creation](#escrow-creation)
   - [Escrow Cancellation](#escrow-cancellation)
   - [Escrow Execution](#escrow-execution)
+  - [Check Create](#check-create)
+  - [Check Cancel](#check-cancel)
+  - [Check Cash](#check-cash)
   - [Payment Channel Create](#payment-channel-create)
   - [Payment Channel Fund](#payment-channel-fund)
   - [Payment Channel Claim](#payment-channel-claim)
@@ -47,6 +50,7 @@
   - [getOrderbook](#getorderbook)
   - [getSettings](#getsettings)
   - [getAccountInfo](#getaccountinfo)
+  - [getAccountObjects](#getaccountobjects)
   - [getPaymentChannel](#getpaymentchannel)
   - [getLedger](#getledger)
   - [preparePayment](#preparepayment)
@@ -60,6 +64,9 @@
   - [preparePaymentChannelCreate](#preparepaymentchannelcreate)
   - [preparePaymentChannelClaim](#preparepaymentchannelclaim)
   - [preparePaymentChannelFund](#preparepaymentchannelfund)
+  - [prepareCheckCreate](#preparecheckcreate)
+  - [prepareCheckCancel](#preparecheckcancel)
+  - [prepareCheckCash](#preparecheckcash)
   - [sign](#sign)
   - [combine](#combine)
   - [submit](#submit)
@@ -266,6 +273,12 @@ Type | Description
 [escrowCreation](#escrow-creation) | An `escrowCreation` transaction creates an escrow on the ledger, which locks XRP until a cryptographic condition is met or it expires. It is like an escrow service where the XRP Ledger acts as the escrow agent.
 [escrowCancellation](#escrow-cancellation) | An `escrowCancellation` transaction unlocks the funds in an escrow and sends them back to the creator of the escrow, but it will only work after the escrow expires.
 [escrowExecution](#escrow-execution) | An `escrowExecution` transaction unlocks the funds in an escrow and sends them to the destination of the escrow, but it will only work if the cryptographic condition is provided.
+[checkCreate](#check-create) | A `checkCreate` transaction creates a check on the ledger, which is a deferred payment that can be cashed by its intended destination.
+[checkCancel](#check-cancel) | A `checkCancel` transaction cancels an unreedemed Check, removing it from the ledger without sending any money.
+[checkCash](#check-cash) | A `checkCash` transaction redeems a Check to receive up to the amount authorized by the corresponding `checkCreate` transaction. Only the `destination` address of a Check can cash it.
+[paymentChannelCreate](#payment-channel-create) | A `paymentChannelCreate` transaction opens a payment channel between two addresses with XRP set aside for asynchronous payments.
+[paymentChannelFund](#payment-channel-fund) | A `paymentChannelFund` transaction adds XRP to a payment channel and optionally sets a new expiration for the channel.
+[paymentChannelClaim](#payment-channel-claim) | A `paymentChannelClaim` transaction withdraws XRP from a channel and optionally requests to close it.
 
 ## Transaction Flow
 
@@ -280,6 +293,9 @@ Executing a transaction with `RippleAPI` requires the following four steps:
     * [prepareEscrowCreation](#prepareescrowcreation)
     * [prepareEscrowCancellation](#prepareescrowcancellation)
     * [prepareEscrowExecution](#prepareescrowexecution)
+    * [prepareCheckCreate](#preparecheckcreate)
+    * [prepareCheckCancel](#preparecheckcancel)
+    * [prepareCheckCash](#preparecheckcash)
 2. [Sign](#sign) - Cryptographically sign the transaction locally and save the [transaction ID](#transaction-id). Signing is how the owner of an account authorizes a transaction to take place. For multisignature transactions, the `signedTransaction` fields returned by `sign` must be collected and passed to the [combine](#combine) method.
 3. [Submit](#submit) - Submit the transaction to the connected server.
 4. Verify - Verify that the transaction got validated by querying with [getTransaction](#gettransaction). This is necessary because transactions may fail even if they were successfully submitted.
@@ -299,7 +315,8 @@ Name | Type | Description
 fee | [value](#value) | *Optional* An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 maxFee | [value](#value) | *Optional* The maximum fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 maxLedgerVersion | integer,null | *Optional* The highest ledger version that the transaction can be included in. If this option and `maxLedgerVersionOffset` are both omitted, the `maxLedgerVersion` option will default to 3 greater than the current validated ledger version (equivalent to `maxLedgerVersionOffset=3`). Use `null` to not set a maximum ledger version.
-maxLedgerVersionOffset | integer | *Optional* Offset from current validated legder version to highest ledger version that the transaction can be included in.
+maxLedgerVersion | string,null | *Optional* The highest ledger version that the transaction can be included in. If this option and `maxLedgerVersionOffset` are both omitted, the `maxLedgerVersion` option will default to 3 greater than the current validated ledger version (equivalent to `maxLedgerVersionOffset=3`). Use `null` to not set a maximum ledger version.
+maxLedgerVersionOffset | integer | *Optional* Offset from current validated ledger version to highest ledger version that the transaction can be included in.
 sequence | [sequence](#account-sequence-number) | *Optional* The initiating account's sequence number for this transaction.
 signersCount | integer | *Optional* Number of signers that will be signing this transaction.
 
@@ -346,11 +363,11 @@ destination | object | The destination of the funds to be sent.
 *destination.* tag | integer | *Optional* An arbitrary unsigned 32-bit integer that identifies a reason for payment or a non-Ripple account.
 *destination.* address | [address](#address) | The address to send to.
 *destination.* minAmount | [laxAmount](#amount) | The minimum amount to be delivered. (This field is exclusive with destination.amount)
-allowPartialPayment | boolean | *Optional* A boolean that, if set to true, indicates that this payment should go through even if the whole amount cannot be delivered because of a lack of liquidity or funds in the source account account
+allowPartialPayment | boolean | *Optional* If true, this payment should proceed even if the whole amount cannot be delivered due to a lack of liquidity or a lack of funds in the source account.
 invoiceID | string | *Optional* A 256-bit hash that can be used to identify a particular payment.
 limitQuality | boolean | *Optional* Only take paths where all the conversions have an input:output ratio that is equal or better than the ratio of destination.amount:source.maxAmount.
 memos | [memos](#transaction-memos) | *Optional* Array of memos to attach to the transaction.
-noDirectRipple | boolean | *Optional* A boolean that can be set to true if paths are specified and the sender would like the Ripple Network to disregard any direct paths from the source account to the destination account. This may be used to take advantage of an arbitrage opportunity or by gateways wishing to issue balances from a hot wallet to a user who has mistakenly set a trustline directly to the hot wallet
+noDirectRipple | boolean | *Optional* If true and paths are specified, the sender would like the XRP Ledger to disregard any direct paths from the source account to the destination account. This may be used to take advantage of an arbitrage opportunity or by gateways wishing to issue balances from a hot wallet to a user who has mistakenly set a trustline directly to the hot wallet.
 paths | string | *Optional* The paths of trustlines and orders to use in executing the payment.
 
 ### Example
@@ -479,7 +496,8 @@ See [Transaction Types](#transaction-types) for a description.
 
 Name | Type | Description
 ---- | ---- | -----------
-defaultRipple | boolean | *Optional* Enable [rippling](https://ripple.com/knowledge_center/understanding-the-noripple-flag/) on this account’s trust lines by default. (New in [rippled 0.27.3](https://github.com/ripple/rippled/releases/tag/0.27.3))
+defaultRipple | boolean | *Optional* Enable [rippling](https://ripple.com/build/understanding-the-noripple-flag/) on this account’s trust lines by default. (New in [rippled 0.27.3](https://github.com/ripple/rippled/releases/tag/0.27.3))
+depositAuth | boolean | *Optional* Enable [Deposit Authorization](https://ripple.com/build/deposit-authorization/) on this account. If set, transactions cannot send value of any kind to this account unless the sender of those transactions is the account itself. (Requires the [DepositAuth amendment](https://ripple.com/build/known-amendments/#depositauth))
 disableMasterKey | boolean | *Optional* Disallows use of the master key to sign transactions for this account.
 disallowIncomingXRP | boolean | *Optional* Indicates that client applications should not send XRP to this account. Not enforced by rippled.
 domain | string | *Optional*  The domain that owns this account, as a hexadecimal string representing the ASCII for the domain in lowercase.
@@ -592,6 +610,74 @@ memos | [memos](#transaction-memos) | *Optional* Array of memos to attach to the
 ```
 
 
+## Check Create
+
+See [Transaction Types](#transaction-types) for a description.
+
+Name | Type | Description
+---- | ---- | -----------
+destination | [address](#address) | Address of the account that can cash the check.
+sendMax | [laxAmount](#amount) | Amount of source currency the check is allowed to debit the sender, including transfer fees on non-XRP currencies.
+destinationTag | integer | *Optional* Destination tag that identifies the reason for the check, or a hosted recipient to pay.
+expiration | date-time string | *Optional* Time after which the check is no longer valid.
+invoiceID | string | *Optional* 256-bit hash, as a 64-character hexadecimal string, representing a specific reason or identifier for this check.
+
+### Example
+
+
+```json
+{
+  "destination": "rsA2LpzuawewSBQXkiju3YQTMzW13pAAdW",
+  "sendMax": {
+    "currency": "XRP",
+    "value": "1"
+  }
+}
+```
+
+
+## Check Cancel
+
+See [Transaction Types](#transaction-types) for a description.
+
+Name | Type | Description
+---- | ---- | -----------
+checkID | string | The ID of the Check ledger object to cancel, as a 64-character hexadecimal string.
+
+### Example
+
+
+```json
+{
+  "checkID": "49647F0D748DC3FE26BDACBC57F251AADEFFF391403EC9BF87C97F67E9977FB0"
+}
+```
+
+
+## Check Cash
+
+See [Transaction Types](#transaction-types) for a description.
+
+Name | Type | Description
+---- | ---- | -----------
+checkID | string | The ID of the Check ledger object to cash, as a 64-character hexadecimal string.
+amount | [laxAmount](#amount) | *Optional* Redeem the Check for exactly this amount, if possible. The currency must match that of the sendMax of the corresponding CheckCreate transaction. You must provide either this field or deliverMin.
+deliverMin | [laxAmount](#amount) | *Optional* Redeem the Check for at least this amount and for as much as possible. The currency must match that of the sendMax of the corresponding CheckCreate transaction. You must provide either this field or amount.
+
+### Example
+
+
+```json
+{
+  "amount": {
+    "currency": "XRP",
+    "value": "1"
+  },
+  "checkID": "838766BA2B995C00744175F69A1B11E32C3DBC40E64801A4056FCBD657F57334"
+}
+```
+
+
 ## Payment Channel Create
 
 See [Transaction Types](#transaction-types) for a description.
@@ -601,8 +687,8 @@ Name | Type | Description
 amount | [value](#value) | Amount of XRP for sender to set aside in this channel.
 destination | [address](#address) | Address to receive XRP claims against this channel.
 settleDelay | number | Amount of seconds the source address must wait before closing the channel if it has unclaimed XRP.
-publicKey | string | Public key of the key pair the source will use to sign claims against this channel.
-cancelAfter | date-time string | *Optional* Time when this channel expires.
+publicKey | string | Public key of the key pair the source may use to sign claims against this channel.
+cancelAfter | date-time string | *Optional* Time when this channel expires. This expiration cannot be changed after creating the channel.
 destinationTag | integer | *Optional* Destination tag.
 sourceTag | integer | *Optional* Source tag.
 
@@ -627,7 +713,7 @@ Name | Type | Description
 ---- | ---- | -----------
 amount | [value](#value) | Amount of XRP to fund the channel with.
 channel | string | 256-bit hexadecimal channel identifier.
-expiration | date-time string | *Optional* New expiration for this channel.
+expiration | date-time string | *Optional* New expiration for this channel. (This does not change the cancelAfter expiration, if the channel has one.) Cannot move the expiration sooner than settleDelay seconds from time of the request.
 
 ### Example
 
@@ -647,12 +733,12 @@ See [Transaction Types](#transaction-types) for a description.
 Name | Type | Description
 ---- | ---- | -----------
 channel | string | 256-bit hexadecimal channel identifier.
-amount | [value](#value) | *Optional* XRP balance of this channel after claim is processed.
-balance | [value](#value) | *Optional* Amount of XRP authorized by signature.
-close | boolean | *Optional* Request to close the channel.
-publicKey | string | *Optional* Public key of the channel's sender
+amount | [value](#value) | *Optional* Amount of XRP authorized by this signature.
+balance | [value](#value) | *Optional* Total XRP balance delivered by this channel after claim is processed.
+close | boolean | *Optional* Request to close the channel. If the channel has no XRP remaining or the destination address requests it, closes the channel immediately (returning unclaimed XRP to the source address). Otherwise, sets the channel to expire after settleDelay seconds have passed.
+publicKey | string | *Optional* Public key of the channel. (For verifying the signature.)
 renew | boolean | *Optional* Clear the channel's expiration time.
-signature | string | *Optional* Signature of this claim.
+signature | string | *Optional* Signed claim authorizing withdrawal of XRP from the channel. (Required except from the channel's source address.)
 
 ### Example
 
@@ -864,7 +950,9 @@ Name | Type | Description
 id | [id](#transaction-id) | A hash of a transaction used to identify the transaction, represented in hexadecimal.
 options | object | *Optional* Options to limit the ledger versions to search.
 *options.* maxLedgerVersion | integer | *Optional* The highest ledger version to search
+*options.* maxLedgerVersion | string | *Optional* The highest ledger version to search
 *options.* minLedgerVersion | integer | *Optional* The lowest ledger version to search.
+*options.* minLedgerVersion | string | *Optional* The lowest ledger version to search.
 
 ### Return Value
 
@@ -891,6 +979,7 @@ outcome | object | The outcome of the transaction (what effects it had).
 *outcome.orderbookChanges.\*[].* expirationTime | date-time string | *Optional* The time after which the order expires, if any.
 *outcome.orderbookChanges.\*[].* makerExchangeRate | [value](#value) | *Optional* The exchange rate between the `quantity` currency and the `totalPrice` currency from the point of view of the maker.
 *outcome.* ledgerVersion | integer | The ledger version that the transaction was validated in.
+*outcome.* ledgerVersion | string | The ledger version that the transaction was validated in.
 *outcome.* indexInLedger | integer | The ordering index of the transaction in the ledger.
 *outcome.* deliveredAmount | [amount](#amount) | *Optional* For payment transactions, it is impossible to reliably compute the actual delivered amount from the balanceChanges due to fixed precision. If the payment is not a partial payment and the transaction succeeded, the deliveredAmount should always be considered to be the amount specified in the transaction.
 *outcome.* timestamp | date-time string | *Optional* The timestamp when the transaction was validated. (May be missing when requesting transactions in binary mode.)
@@ -1020,8 +1109,10 @@ options | object | *Optional* Options to filter the resulting transactions.
 *options.* initiated | boolean | *Optional* If true, return only transactions initiated by the account specified by `address`. If false, return only transactions not initiated by the account specified by `address`.
 *options.* limit | integer | *Optional* If specified, return at most this many transactions.
 *options.* maxLedgerVersion | integer | *Optional* Return only transactions in this ledger version or lower.
+*options.* maxLedgerVersion | string | *Optional* Return only transactions in this ledger version or lower.
 *options.* minLedgerVersion | integer | *Optional* Return only transactions in this ledger verion or higher.
-*options.* start | string | *Optional* If specified, this transaction will be the first transaction in the result.
+*options.* minLedgerVersion | string | *Optional* Return only transactions in this ledger verion or higher.
+*options.* start | string | *Optional* If specified, this transaction will be the first transaction in the result. You cannot use `start` with `minLedgerVersion` or `maxLedgerVersion`. When `start` is specified, these ledger versions will be determined internally.
 *options.* types | array\<[transactionType](#transaction-types)\> | *Optional* Only return transactions of the specified [Transaction Types](#transaction-types).
 
 ### Return Value
@@ -1253,6 +1344,7 @@ options | object | *Optional* Options to filter and determine which trustlines t
 *options.* counterparty | [address](#address) | *Optional* Only return trustlines with this counterparty.
 *options.* currency | [currency](#currency) | *Optional* Only return trustlines for this currency.
 *options.* ledgerVersion | integer | *Optional* Return trustlines as they were in this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Return trustlines as they were in this historical ledger version.
 *options.* limit | integer | *Optional* Return at most this many trustlines.
 
 ### Return Value
@@ -1397,6 +1489,7 @@ options | object | *Optional* Options to filter and determine which balances to 
 *options.* counterparty | [address](#address) | *Optional* Only return balances with this counterparty.
 *options.* currency | [currency](#currency) | *Optional* Only return balances for this currency.
 *options.* ledgerVersion | integer | *Optional* Return balances as they were in this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Return balances as they were in this historical ledger version.
 *options.* limit | integer | *Optional* Return at most this many balances.
 
 ### Return Value
@@ -1562,6 +1655,7 @@ address | [address](#address) | The Ripple address of the account to get the bal
 options | object | *Optional* Options to determine how the balances will be calculated.
 *options.* excludeAddresses | array\<[address](#address)\> | *Optional* Addresses to exclude from the balance totals.
 *options.* ledgerVersion | integer | *Optional* Get the balance sheet as of this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Get the balance sheet as of this historical ledger version.
 
 ### Return Value
 
@@ -1778,6 +1872,7 @@ Name | Type | Description
 address | [address](#address) | The Ripple address of the account to get open orders for.
 options | object | *Optional* Options that determine what orders will be returned.
 *options.* ledgerVersion | integer | *Optional* Return orders as of this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Return orders as of this historical ledger version.
 *options.* limit | integer | *Optional* At most this many orders will be returned.
 
 ### Return Value
@@ -2161,6 +2256,7 @@ orderbook | object | The order book to get.
 *orderbook.* counter | object | A currency-counterparty pair, or just currency if it's XRP
 options | object | *Optional* Options to determine what to return.
 *options.* ledgerVersion | integer | *Optional* Return the order book as of this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Return the order book as of this historical ledger version.
 *options.* limit | integer | *Optional* Return at most this many orders from the order book.
 
 ### Return Value
@@ -2176,6 +2272,7 @@ bids[] | object | An order in the order book.
 *bids[].properties.* maker | [address](#address) | The address of the account that submitted the order.
 *bids[].properties.* sequence | [sequence](#account-sequence-number) | The account sequence number of the transaction that created this order.
 *bids[].properties.* makerExchangeRate | [value](#value) | The exchange rate from the point of view of the account that submitted the order (also known as "quality").
+*bids[].data.* \* | object | 
 *bids[].* state | object | *Optional* The state of the order.
 *bids[].state.* fundedAmount | [amount](#amount) | How much of the amount the maker would have to pay that the maker currently holds.
 *bids[].state.* priceOfFundedAmount | [amount](#amount) | How much the `fundedAmount` would convert to through the exchange rate of this order.
@@ -2186,9 +2283,16 @@ asks[] | object | An order in the order book.
 *asks[].properties.* maker | [address](#address) | The address of the account that submitted the order.
 *asks[].properties.* sequence | [sequence](#account-sequence-number) | The account sequence number of the transaction that created this order.
 *asks[].properties.* makerExchangeRate | [value](#value) | The exchange rate from the point of view of the account that submitted the order (also known as "quality").
+*asks[].data.* \* | object | 
 *asks[].* state | object | *Optional* The state of the order.
 *asks[].state.* fundedAmount | [amount](#amount) | How much of the amount the maker would have to pay that the maker currently holds.
 *asks[].state.* priceOfFundedAmount | [amount](#amount) | How much the `fundedAmount` would convert to through the exchange rate of this order.
+
+### New in ripple-lib 0.22.0 and higher
+
+The response includes a `data` property containing the raw order data. This may include `owner_funds`, `Flags`, and other fields.
+
+For details, see the rippled method [book_offers](https://ripple.com/build/rippled-apis/#book-offers).
 
 ### Example
 
@@ -2230,6 +2334,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rwBYyfufTzk77zUSKEu4MvixfarC35av1J",
         "sequence": 386940,
         "makerExchangeRate": "326.5003614141928"
+      },
+      "data": {
+        "Account": "rwBYyfufTzk77zUSKEu4MvixfarC35av1J",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570B9980E49C7DE8",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000008",
+        "PreviousTxnID": "92DBA0BE18B331AC61FB277211477A255D3B5EA9C5FE689171DE689FB45FE18A",
+        "PreviousTxnLgrSeq": 10714030,
+        "Sequence": 386940,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.2849323720855092"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "93.030522464522"
+        },
+        "index": "8092033091034D94219BC1131AF7A6B469D790D81831CB479AB6F67A32BE4E13",
+        "owner_funds": "31.77682120227525",
+        "quality": "326.5003614141928"
       }
     },
     {
@@ -2250,6 +2378,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rwjsRktX1eguUr1pHTffyHnC4uyrvX58V1",
         "sequence": 207855,
         "makerExchangeRate": "330.6364334177034"
+      },
+      "data": {
+        "Account": "rwjsRktX1eguUr1pHTffyHnC4uyrvX58V1",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570BBF1EEFA2FB0A",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "C6BDA152363E3CFE18688A6830B49F3DB2B05976110B5908EA4EB66D93DEEB1F",
+        "PreviousTxnLgrSeq": 10714031,
+        "Sequence": 207855,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.00302447007930511"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1"
+        },
+        "index": "8DB3520FF9CB16A0EA955056C49115F8CFB03A587D0A4AFC844F1D220EFCE0B9",
+        "owner_funds": "0.0670537912615556",
+        "quality": "330.6364334177034"
       }
     },
     {
@@ -2271,6 +2423,31 @@ return api.getOrderbook(address, orderbook)
         "maker": "raudnGKfTK23YKfnS7ixejHrqGERTYNFXk",
         "sequence": 110103,
         "makerExchangeRate": "331.1338298016111"
+      },
+      "data": {
+        "Account": "raudnGKfTK23YKfnS7ixejHrqGERTYNFXk",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570BC3A506FC016F",
+        "BookNode": "0000000000000000",
+        "Expiration": 472785283,
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000008F0",
+        "PreviousTxnID": "77E763F1D02F58965CD1AD94F557B37A582FAC7760B71F391B856959836C2F7B",
+        "PreviousTxnLgrSeq": 10713576,
+        "Sequence": 110103,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.3"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "99.34014894048333"
+        },
+        "index": "9ECDFD31B28643FD3A54658398C5715D6DAD574F83F04529CB24765770F9084D",
+        "owner_funds": "4.021116654525635",
+        "quality": "331.1338298016111"
       }
     },
     {
@@ -2303,6 +2480,40 @@ return api.getOrderbook(address, orderbook)
           "value": "268.2219496064341",
           "counterparty": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"
         }
+      },
+      "data": {
+        "Account": "rPyYxUGK8L4dgEvjPs3aRc1B1jEiLr3Hx5",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570BCB85BCA78000",
+        "BookNode": "0000000000000000",
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "D22993C68C94ACE3F2FCE4A334EBEA98CC46DCA92886C12B5E5B4780B5E17D4E",
+        "PreviousTxnLgrSeq": 10711938,
+        "Sequence": 392,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.8095"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "268.754"
+        },
+        "index": "18B136E08EF50F0DEE8521EA22D16A950CD8B6DDF5F6E07C35F7FDDBBB09718D",
+        "owner_funds": "0.8095132334507441",
+        "quality": "332",
+        "taker_gets_funded": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.8078974385735969"
+        },
+        "taker_pays_funded": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "268.2219496064341"
+        }
       }
     },
     {
@@ -2324,6 +2535,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "raudnGKfTK23YKfnS7ixejHrqGERTYNFXk",
         "sequence": 110105,
         "makerExchangeRate": "337.7996295968016"
+      },
+      "data": {
+        "Account": "raudnGKfTK23YKfnS7ixejHrqGERTYNFXk",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570C00450D461510",
+        "BookNode": "0000000000000000",
+        "Expiration": 472785284,
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000008F0",
+        "PreviousTxnID": "1F4D9D859D9AABA888C0708A572B38919A3AEF2C8C1F5A13F58F44C92E5FF3FB",
+        "PreviousTxnLgrSeq": 10713576,
+        "Sequence": 110105,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.4499999999999999"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "152.0098333185607"
+        },
+        "index": "9F380E0B39E2AF8AA9608C3E39A5A8628E6D0F44385C6D12BE06F4FEC8D83351",
+        "quality": "337.7996295968016"
       }
     },
     {
@@ -2344,6 +2579,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rDbsCJr5m8gHDCNEHCZtFxcXHsD4S9jH83",
         "sequence": 110061,
         "makerExchangeRate": "347.2306949944844"
+      },
+      "data": {
+        "Account": "rDbsCJr5m8gHDCNEHCZtFxcXHsD4S9jH83",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570C560B764D760C",
+        "BookNode": "0000000000000000",
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000001",
+        "PreviousTxnID": "9A0B6B76F0D86614F965A2FFCC8859D8607F4E424351D4CFE2FBE24510F93F25",
+        "PreviousTxnLgrSeq": 10708382,
+        "Sequence": 110061,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.003768001830745216"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1.308365894430151"
+        },
+        "index": "B971769686CE1B9139502770158A4E7C011CFF8E865E5AAE5428E23AAA0E146D",
+        "owner_funds": "0.2229210189326514",
+        "quality": "347.2306949944844"
       }
     },
     {
@@ -2365,6 +2624,31 @@ return api.getOrderbook(address, orderbook)
         "maker": "rDVBvAQScXrGRGnzrxRrcJPeNLeLeUTAqE",
         "sequence": 35788,
         "makerExchangeRate": "352.7092203179974"
+      },
+      "data": {
+        "Account": "rDVBvAQScXrGRGnzrxRrcJPeNLeLeUTAqE",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570C87DF25DC4FC6",
+        "BookNode": "0000000000000000",
+        "Expiration": 472783298,
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000003D2",
+        "PreviousTxnID": "E5F9A10F29A4BB3634D5A84FC96931E17267B58E0D2D5ADE24FFB751E52ADB9E",
+        "PreviousTxnLgrSeq": 10713533,
+        "Sequence": 35788,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.5"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "176.3546101589987"
+        },
+        "index": "D2CB71038AD0ECAF4B5FF0A953AD1257225D0071E6F3AF9ADE67F05590B45C6E",
+        "owner_funds": "6.617688680663627",
+        "quality": "352.7092203179974"
       }
     },
     {
@@ -2397,6 +2681,40 @@ return api.getOrderbook(address, orderbook)
           "value": "179.1217564870259",
           "counterparty": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"
         }
+      },
+      "data": {
+        "Account": "rN6jbxx4H6NxcnmkzBxQnbCWLECNKrgSSf",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570CC0B8E0E2C000",
+        "BookNode": "0000000000000000",
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "2E16ACFEAC2306E3B3483D445787F3496FACF9504F7A5E909620C1A73E2EDE54",
+        "PreviousTxnLgrSeq": 10558020,
+        "Sequence": 491,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.5"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "179.48"
+        },
+        "index": "DA853913C8013C9471957349EDAEE4DF4846833B8CCB92008E2A8994E37BEF0D",
+        "owner_funds": "0.5",
+        "quality": "358.96",
+        "taker_gets_funded": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.499001996007984"
+        },
+        "taker_pays_funded": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "179.1217564870259"
+        }
       }
     },
     {
@@ -2418,6 +2736,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rDVBvAQScXrGRGnzrxRrcJPeNLeLeUTAqE",
         "sequence": 35789,
         "makerExchangeRate": "360.9637829743709"
+      },
+      "data": {
+        "Account": "rDVBvAQScXrGRGnzrxRrcJPeNLeLeUTAqE",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570CD2F24C9C145D",
+        "BookNode": "0000000000000000",
+        "Expiration": 472783299,
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000003D2",
+        "PreviousTxnID": "B1B12E47043B4260223A2C4240D19E93526B55B1DB38DEED335DACE7C04FEB23",
+        "PreviousTxnLgrSeq": 10713534,
+        "Sequence": 35789,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.8"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "288.7710263794967"
+        },
+        "index": "B89AD580E908F7337CCBB47A0BAAC6417EF13AC3465E34E8B7DD3BED016EA833",
+        "quality": "360.9637829743709"
       }
     },
     {
@@ -2450,6 +2792,40 @@ return api.getOrderbook(address, orderbook)
           "value": "82.50309772176658",
           "counterparty": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"
         }
+      },
+      "data": {
+        "Account": "rUeCeioKJkbYhv4mRGuAbZpPcqkMCoYq6N",
+        "BookDirectory": "6EAB7C172DEFA430DBFAD120FDC373B5F5AF8B191649EC98570D0069F50EA028",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000012",
+        "PreviousTxnID": "F0E8ABF07F83DF0B5EF5B417E8E29A45A5503BA8F26FBC86447CC6B1FAD6A1C4",
+        "PreviousTxnLgrSeq": 10447672,
+        "Sequence": 5255,
+        "TakerGets": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.5"
+        },
+        "TakerPays": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "182.9814890090516"
+        },
+        "index": "D652DCE4B19C6CB43912651D3A975371D3B2A16A034EDF07BC11BF721AEF94A4",
+        "owner_funds": "0.225891986027944",
+        "quality": "365.9629780181032",
+        "taker_gets_funded": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.2254411038203033"
+        },
+        "taker_pays_funded": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "82.50309772176658"
+        }
       }
     }
   ],
@@ -2472,6 +2848,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "r49y2xKuKVG2dPkNHgWQAV61cjxk8gryjQ",
         "sequence": 434,
         "makerExchangeRate": "0.003120027456241615"
+      },
+      "data": {
+        "Account": "r49y2xKuKVG2dPkNHgWQAV61cjxk8gryjQ",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B15A60037FFCF",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "544932DC56D72E845AF2B738821FE07865E32EC196270678AB0D947F54E9F49F",
+        "PreviousTxnLgrSeq": 10679000,
+        "Sequence": 434,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "3205.1"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "10"
+        },
+        "index": "CE457115A4ADCC8CB351B3E35A0851E48DE16605C23E305017A9B697B156DE5A",
+        "owner_funds": "41952.95917199965",
+        "quality": "0.003120027456241615"
       }
     },
     {
@@ -2492,6 +2892,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rDYCRhpahKEhCFV25xScg67Bwf4W9sTYAm",
         "sequence": 233,
         "makerExchangeRate": "0.003125"
+      },
+      "data": {
+        "Account": "rDYCRhpahKEhCFV25xScg67Bwf4W9sTYAm",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B1A2BC2EC5000",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "F68F9658AB3D462FEB027E6C380F054BC6D2514B43EC3C6AD46EE19C59BF1CC3",
+        "PreviousTxnLgrSeq": 10704238,
+        "Sequence": 233,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1599.063669386278"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "4.99707396683212"
+        },
+        "index": "BF14FBB305159DBCAEA91B7E848408F5B559A91B160EBCB6D244958A6A16EA6B",
+        "owner_funds": "3169.910902910102",
+        "quality": "0.003125"
       }
     },
     {
@@ -2524,6 +2948,41 @@ return api.getOrderbook(address, orderbook)
           "currency": "BTC",
           "value": "0",
           "counterparty": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"
+        }
+      },
+      "data": {
+        "Account": "raudnGKfTK23YKfnS7ixejHrqGERTYNFXk",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B2BF1C2F4D4C9",
+        "BookNode": "0000000000000000",
+        "Expiration": 472785284,
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000008F0",
+        "PreviousTxnID": "446410E1CD718AC01929DD16B558FCF6B3A7B8BF208C420E67A280C089C5C59B",
+        "PreviousTxnLgrSeq": 10713576,
+        "Sequence": 110104,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "143.1050962074379"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.4499999999999999"
+        },
+        "index": "67924B0EAA15784CC00CCD5FDD655EE2D6D2AE40341776B5F14E52341E7FC73E",
+        "owner_funds": "0",
+        "quality": "0.003144542101755081",
+        "taker_gets_funded": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0"
+        },
+        "taker_pays_funded": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0"
         }
       }
     },
@@ -2558,6 +3017,41 @@ return api.getOrderbook(address, orderbook)
           "value": "0",
           "counterparty": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"
         }
+      },
+      "data": {
+        "Account": "rDVBvAQScXrGRGnzrxRrcJPeNLeLeUTAqE",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B2CD7A2BFBB75",
+        "BookNode": "0000000000000000",
+        "Expiration": 472772651,
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000003CD",
+        "PreviousTxnID": "D49164AB68DDA3AEC9DFCC69A35685C4F532B5C231D3C1D25FEA7D5D0224FB84",
+        "PreviousTxnLgrSeq": 10711128,
+        "Sequence": 35625,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "254.329207354604"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.8"
+        },
+        "index": "567BF2825173E3FB28FC94E436B6EB30D9A415FC2335E6D25CDE1BE47B25D120",
+        "owner_funds": "0",
+        "quality": "0.003145529403882357",
+        "taker_gets_funded": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0"
+        },
+        "taker_pays_funded": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0"
+        }
       }
     },
     {
@@ -2578,6 +3072,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rwBYyfufTzk77zUSKEu4MvixfarC35av1J",
         "sequence": 387756,
         "makerExchangeRate": "0.003155743848271834"
+      },
+      "data": {
+        "Account": "rwBYyfufTzk77zUSKEu4MvixfarC35av1J",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B3621DF140FDA",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000008",
+        "PreviousTxnID": "2E371E2B287C8A9FBB3424E4204B17AD9FA1BAA9F3B33C7D2261E3B038AFF083",
+        "PreviousTxnLgrSeq": 10716291,
+        "Sequence": 387756,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "390.4979"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1.23231134568807"
+        },
+        "index": "8CA23E55BF9F46AC7E803D3DB40FD03225EFCA66650D4CF0CBDD28A7CCDC8400",
+        "owner_funds": "5704.824764087842",
+        "quality": "0.003155743848271834"
       }
     },
     {
@@ -2598,6 +3116,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rwjsRktX1eguUr1pHTffyHnC4uyrvX58V1",
         "sequence": 208927,
         "makerExchangeRate": "0.003160328237957649"
+      },
+      "data": {
+        "Account": "rwjsRktX1eguUr1pHTffyHnC4uyrvX58V1",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B3A4D41FF4211",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "91763FA7089C63CC4D5D14CBA6A5A5BF7ECE949B0D34F00FD35E733AF9F05AF1",
+        "PreviousTxnLgrSeq": 10716292,
+        "Sequence": 208927,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.003160328237957649"
+        },
+        "index": "7206866E39D9843623EE79E570242753DEE3C597F3856AEFB4631DD5AD8B0557",
+        "owner_funds": "45.55665106096075",
+        "quality": "0.003160328237957649"
       }
     },
     {
@@ -2618,6 +3160,29 @@ return api.getOrderbook(address, orderbook)
         "maker": "r49y2xKuKVG2dPkNHgWQAV61cjxk8gryjQ",
         "sequence": 429,
         "makerExchangeRate": "0.003174603174603175"
+      },
+      "data": {
+        "Account": "r49y2xKuKVG2dPkNHgWQAV61cjxk8gryjQ",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B4748E68669A7",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "3B3CF6FF1A336335E78513CF77AFD3A784ACDD7B1B4D3F1F16E22957A060BFAE",
+        "PreviousTxnLgrSeq": 10639969,
+        "Sequence": 429,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "4725"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "15"
+        },
+        "index": "42894809370C7E6B23498EF8E22AD4B05F02B94F08E6983357A51EA96A95FF7F",
+        "quality": "0.003174603174603175"
       }
     },
     {
@@ -2638,6 +3203,30 @@ return api.getOrderbook(address, orderbook)
         "maker": "rDbsCJr5m8gHDCNEHCZtFxcXHsD4S9jH83",
         "sequence": 110099,
         "makerExchangeRate": "0.003193013959408667"
+      },
+      "data": {
+        "Account": "rDbsCJr5m8gHDCNEHCZtFxcXHsD4S9jH83",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B58077ED03C1B",
+        "BookNode": "0000000000000000",
+        "Flags": 131072,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000001",
+        "PreviousTxnID": "98F3F2D02D3BB0AEAC09EECCF2F24BBE5E1AB2C71C40D7BD0A5199E12541B6E2",
+        "PreviousTxnLgrSeq": 10715839,
+        "Sequence": 110099,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1.24252537879871"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0.003967400879423823"
+        },
+        "index": "F4404D6547149419D3607F81D7080979FBB3AFE2661F9A933E2F6C07AC1D1F6D",
+        "owner_funds": "73.52163803897041",
+        "quality": "0.003193013959408667"
       }
     },
     {
@@ -2671,6 +3260,40 @@ return api.getOrderbook(address, orderbook)
           "value": "0",
           "counterparty": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B"
         }
+      },
+      "data": {
+        "Account": "rDVBvAQScXrGRGnzrxRrcJPeNLeLeUTAqE",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B72A555B981A3",
+        "BookNode": "0000000000000000",
+        "Expiration": 472772652,
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "00000000000003CD",
+        "PreviousTxnID": "146C8DBB047BAAFAE5B8C8DECCCDACD9DFCD7A464E5AB273230FF975E9B83CF7",
+        "PreviousTxnLgrSeq": 10711128,
+        "Sequence": 35627,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "496.5429474010489"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "1.6"
+        },
+        "index": "50CAA04E81D0009115B61C132FC9887FA9E5336E0CB8A2E7D3280ADBF6ABC043",
+        "quality": "0.003222279177208227",
+        "taker_gets_funded": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0"
+        },
+        "taker_pays_funded": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "0"
+        }
       }
     },
     {
@@ -2691,6 +3314,29 @@ return api.getOrderbook(address, orderbook)
         "maker": "r49y2xKuKVG2dPkNHgWQAV61cjxk8gryjQ",
         "sequence": 431,
         "makerExchangeRate": "0.003222687721559781"
+      },
+      "data": {
+        "Account": "r49y2xKuKVG2dPkNHgWQAV61cjxk8gryjQ",
+        "BookDirectory": "20294C923E80A51B487EB9547B3835FD483748B170D2D0A4520B730474DD96E5",
+        "BookNode": "0000000000000000",
+        "Flags": 0,
+        "LedgerEntryType": "Offer",
+        "OwnerNode": "0000000000000000",
+        "PreviousTxnID": "624F9ADA85EC3BE845EAC075B47E01E4F89288EAF27823C715777B3DFFB21F24",
+        "PreviousTxnLgrSeq": 10639989,
+        "Sequence": 431,
+        "TakerGets": {
+          "currency": "USD",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "3103"
+        },
+        "TakerPays": {
+          "currency": "BTC",
+          "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+          "value": "10"
+        },
+        "index": "8A319A496288228AD9CAD74375E32FA81805C56A9AD84798A26756A8B3F9EE23",
+        "quality": "0.003222687721559781"
       }
     }
   ]
@@ -2711,6 +3357,7 @@ Name | Type | Description
 address | [address](#address) | The address of the account to get the settings of.
 options | object | *Optional* Options that affect what to return.
 *options.* ledgerVersion | integer | *Optional* Get the settings as of this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Get the settings as of this historical ledger version.
 
 ### Return Value
 
@@ -2718,7 +3365,8 @@ This method returns a promise that resolves with an array of objects with the fo
 
 Name | Type | Description
 ---- | ---- | -----------
-defaultRipple | boolean | *Optional* Enable [rippling](https://ripple.com/knowledge_center/understanding-the-noripple-flag/) on this account’s trust lines by default. (New in [rippled 0.27.3](https://github.com/ripple/rippled/releases/tag/0.27.3))
+defaultRipple | boolean | *Optional* Enable [rippling](https://ripple.com/build/understanding-the-noripple-flag/) on this account’s trust lines by default. (New in [rippled 0.27.3](https://github.com/ripple/rippled/releases/tag/0.27.3))
+depositAuth | boolean | *Optional* Enable [Deposit Authorization](https://ripple.com/build/deposit-authorization/) on this account. If set, transactions cannot send value of any kind to this account unless the sender of those transactions is the account itself. (Requires the [DepositAuth amendment](https://ripple.com/build/known-amendments/#depositauth))
 disableMasterKey | boolean | *Optional* Disallows use of the master key to sign transactions for this account.
 disallowIncomingXRP | boolean | *Optional* Indicates that client applications should not send XRP to this account. Not enforced by rippled.
 domain | string | *Optional*  The domain that owns this account, as a hexadecimal string representing the ASCII for the domain in lowercase.
@@ -2788,6 +3436,7 @@ Name | Type | Description
 address | [address](#address) | The address of the account to get the account info of.
 options | object | *Optional* Options that affect what to return.
 *options.* ledgerVersion | integer | *Optional* Get the account info as of this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Get the account info as of this historical ledger version.
 
 ### Return Value
 
@@ -2800,6 +3449,7 @@ xrpBalance | [value](#value) | The XRP balance owned by the account.
 ownerCount | integer | Number of other ledger entries (specifically, trust lines and offers) attributed to this account. This is used to calculate the total reserve required to use the account.
 previousAffectingTransactionID | string | Hash value representing the most recent transaction that affected this account node directly. **Note:** This does not include changes to the account’s trust lines and offers.
 previousAffectingTransactionLedgerVersion | integer | The ledger version that the transaction identified by the `previousAffectingTransactionID` was validated in.
+previousAffectingTransactionLedgerVersion | string | The ledger version that the transaction identified by the `previousAffectingTransactionID` was validated in.
 previousInitiatedTransactionID | string | *Optional* Hash value representing the most recent transaction that was initiated by this account.
 
 ### Example
@@ -2818,6 +3468,330 @@ return api.getAccountInfo(address).then(info =>
   "ownerCount": 1,
   "previousAffectingTransactionID": "19899273706A9E040FDB5885EE991A1DC2BAD878A0D6E7DBCFB714E63BF737F7",
   "previousAffectingTransactionLedgerVersion": 6614625
+}
+```
+
+
+## getAccountObjects
+
+`getAccountObjects(address: string, options: object): Promise<AccountObjectsResponse>`
+
+Returns objects owned by an account. For an account's trust lines and balances, see `getTrustlines` and `getBalances`.
+
+### Parameters
+
+Name | Type | Description
+---- | ---- | -----------
+address | [address](#address) | The address of the account to get the account objects of.
+options | object | *Optional* Options that affect what to return.
+*options.* ledgerHash | string | *Optional* (Optional) A 20-byte hex string for the ledger version to use.
+*options.* ledgerIndex | integer | *Optional* (Optional) The sequence number of the ledger to use, or a shortcut string to choose a ledger automatically.
+*options.* ledgerIndex | string | *Optional* (Optional) The sequence number of the ledger to use, or a shortcut string to choose a ledger automatically.
+*options.* limit | integer | *Optional* (Optional) The maximum number of objects to include in the results.
+*options.* type | string | *Optional* (Optional) Filter results to include only this type of ledger object. The valid types are: `check`, `escrow`, `offer`, `payment_channel`, `signer_list`, and `state` (trust line).
+
+### Return Value
+
+This method returns a promise that resolves with an object with the following structure:
+
+Name | Type | Description
+---- | ---- | -----------
+account | [address](#address) | Unique address of the account this request corresponds to.
+account_objects | array\<object\> | Array of objects owned by this account. Each object is in its raw ledger format.
+ledger_current_index | integer | *Optional* (May be omitted) The sequence number of the ledger that was used to generate this response.
+ledger_current_index | string | *Optional* (May be omitted) The sequence number of the ledger that was used to generate this response.
+ledger_hash | string | *Optional* (May be omitted) The identifying hash of the ledger that was used to generate this response.
+ledger_index | integer | *Optional* (May be omitted) The sequence number of the ledger that was used to generate this response.
+ledger_index | string | *Optional* (May be omitted) The sequence number of the ledger that was used to generate this response.
+limit | integer | *Optional* (May be omitted) The limit that was used in this request, if any.
+validated | boolean | *Optional* If included and set to true, the information in this request comes from a validated ledger version. Otherwise, the information is subject to change.
+
+The types of objects that may be returned include:
+* Offer objects for orders that are currently live, unfunded, or expired but not yet removed.
+* RippleState objects for trust lines where this account's side is not in the default state.
+* A SignerList object if the account has multi-signing enabled.
+* Escrow objects for held payments that have not yet been executed or canceled.
+* PayChannel objects for open payment channels.
+* Check objects for pending checks.
+
+### Example
+
+```javascript
+const address = 'r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59';
+return api.getAccountObjects(address: address).then(objects =>
+  {/* ... */});
+```
+
+
+```json
+{
+  "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+  "account_objects": [
+    {
+      "Balance": {
+        "currency": "ASP",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "0"
+      },
+      "Flags": 65536,
+      "HighLimit": {
+        "currency": "ASP",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "ASP",
+        "issuer": "r3vi7mWxru9rJCxETCyA1CHvzL96eZWx5z",
+        "value": "10"
+      },
+      "LowNode": "0000000000000000",
+      "PreviousTxnID":
+        "BF7555B0F018E3C5E2A3FF9437A1A5092F32903BE246202F988181B9CED0D862",
+      "PreviousTxnLgrSeq": 1438879,
+      "index":
+        "2243B0B630EA6F7330B654EFA53E27A7609D9484E535AB11B7F946DF3D247CE9"
+    },
+    {
+      "Balance": {
+        "currency": "XAU",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "0"
+      },
+      "Flags": 3342336,
+      "HighLimit": {
+        "currency": "XAU",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "XAU",
+        "issuer": "r3vi7mWxru9rJCxETCyA1CHvzL96eZWx5z",
+        "value": "0"
+      },
+      "LowNode": "0000000000000000",
+      "PreviousTxnID":
+        "79B26D7D34B950AC2C2F91A299A6888FABB376DD76CFF79D56E805BF439F6942",
+      "PreviousTxnLgrSeq": 5982530,
+      "index":
+        "9ED4406351B7A511A012A9B5E7FE4059FA2F7650621379C0013492C315E25B97"
+    },
+    {
+      "Balance": {
+        "currency": "USD",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "0"
+      },
+      "Flags": 1114112,
+      "HighLimit": {
+        "currency": "USD",
+        "issuer": "rMwjYedjc7qqtKYVLiAccJSmCwih4LnE2q",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "USD",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "5"
+      },
+      "LowNode": "0000000000000000",
+      "PreviousTxnID":
+        "6FE8C824364FB1195BCFEDCB368DFEE3980F7F78D3BF4DC4174BB4C86CF8C5CE",
+      "PreviousTxnLgrSeq": 10555014,
+      "index":
+        "2DECFAC23B77D5AEA6116C15F5C6D4669EBAEE9E7EE050A40FE2B1E47B6A9419"
+    },
+    {
+      "Balance": {
+        "currency": "MXN",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "481.992867407479"
+      },
+      "Flags": 65536,
+      "HighLimit": {
+        "currency": "MXN",
+        "issuer": "rHpXfibHgSb64n8kK9QWDpdbfqSpYbM9a4",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "MXN",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "1000"
+      },
+      "LowNode": "0000000000000000",
+      "PreviousTxnID":
+        "A467BACE5F183CDE1F075F72435FE86BAD8626ED1048EDEFF7562A4CC76FD1C5",
+      "PreviousTxnLgrSeq": 3316170,
+      "index":
+        "EC8B9B6B364AF6CB6393A423FDD2DDBA96375EC772E6B50A3581E53BFBDFDD9A"
+    },
+    {
+      "Balance": {
+        "currency": "EUR",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "0.793598266778297"
+      },
+      "Flags": 1114112,
+      "HighLimit": {
+        "currency": "EUR",
+        "issuer": "rLEsXccBGNR3UPuPu2hUXPjziKC3qKSBun",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "EUR",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "1"
+      },
+      "LowNode": "0000000000000000",
+      "PreviousTxnID":
+        "E9345D44433EA368CFE1E00D84809C8E695C87FED18859248E13662D46A0EC46",
+      "PreviousTxnLgrSeq": 5447146,
+      "index":
+        "4513749B30F4AF8DA11F077C448128D6486BF12854B760E4E5808714588AA915"
+    },
+    {
+      "Balance": {
+        "currency": "CNY",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "0"
+      },
+      "Flags": 2228224,
+      "HighLimit": {
+        "currency": "CNY",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "3"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "CNY",
+        "issuer": "rnuF96W4SZoCJmbHYBFoJZpR8eCaxNvekK",
+        "value": "0"
+      },
+      "LowNode": "0000000000000008",
+      "PreviousTxnID":
+        "2FDDC81F4394695B01A47913BEC4281AC9A283CC8F903C14ADEA970F60E57FCF",
+      "PreviousTxnLgrSeq": 5949673,
+      "index":
+        "578C327DA8944BDE2E10C9BA36AFA2F43E06C8D1E8819FB225D266CBBCFDE5CE"
+    },
+    {
+      "Balance": {
+        "currency": "DYM",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "1.336889190631542"
+      },
+      "Flags": 65536,
+      "HighLimit": {
+        "currency": "DYM",
+        "issuer": "rGwUWgN5BEg3QGNY3RX2HfYowjUTZdid3E",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "DYM",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "3"
+      },
+      "LowNode": "0000000000000000",
+      "PreviousTxnID":
+        "6DA2BD02DFB83FA4DAFC2651860B60071156171E9C021D9E0372A61A477FFBB1",
+      "PreviousTxnLgrSeq": 8818732,
+      "index":
+        "5A2A5FF12E71AEE57564E624117BBA68DEF78CD564EF6259F92A011693E027C7"
+    },
+    {
+      "Balance": {
+        "currency": "CHF",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "-0.3488146605801446"
+      },
+      "Flags": 131072,
+      "HighLimit": {
+        "currency": "CHF",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "0"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "CHF",
+        "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+        "value": "0"
+      },
+      "LowNode": "000000000000008C",
+      "PreviousTxnID":
+        "722394372525A13D1EAAB005642F50F05A93CF63F7F472E0F91CDD6D38EB5869",
+      "PreviousTxnLgrSeq": 2687590,
+      "index":
+        "F2DBAD20072527F6AD02CE7F5A450DBC72BE2ABB91741A8A3ADD30D5AD7A99FB"
+    },
+    {
+      "Balance": {
+        "currency": "BTC",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "0"
+      },
+      "Flags": 131072,
+      "HighLimit": {
+        "currency": "BTC",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "3"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "BTC",
+        "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+        "value": "0"
+      },
+      "LowNode": "0000000000000043",
+      "PreviousTxnID":
+        "03EDF724397D2DEE70E49D512AECD619E9EA536BE6CFD48ED167AE2596055C9A",
+      "PreviousTxnLgrSeq": 8317037,
+      "index":
+        "767C12AF647CDF5FEB9019B37018748A79C50EDAF87E8D4C7F39F78AA7CA9765"
+    },
+    {
+      "Balance": {
+        "currency": "USD",
+        "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji",
+        "value": "-16.00534471983042"
+      },
+      "Flags": 131072,
+      "HighLimit": {
+        "currency": "USD",
+        "issuer": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        "value": "5000"
+      },
+      "HighNode": "0000000000000000",
+      "LedgerEntryType": "RippleState",
+      "LowLimit": {
+        "currency": "USD",
+        "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+        "value": "0"
+      },
+      "LowNode": "000000000000004A",
+      "PreviousTxnID":
+        "CFFF5CFE623C9543308C6529782B6A6532207D819795AAFE85555DB8BF390FE7",
+      "PreviousTxnLgrSeq": 14365854,
+      "index":
+        "826CF5BFD28F3934B518D0BDF3231259CBD3FD0946E3C3CA0C97D2C75D2D1A09"
+    }
+  ],
+  "ledger_hash":
+    "053DF17D2289D1C4971C22F235BC1FCA7D4B3AE966F842E5819D0749E0B8ECD3",
+  "ledger_index": 14378733,
+  "validated": true
 }
 ```
 
@@ -2847,6 +3821,7 @@ balance | [value](#value) | The total amount of XRP delivered by this channel.
 settleDelay | number | Amount of seconds the source address must wait before closing the channel if it has unclaimed XRP.
 previousAffectingTransactionID | string | Hash value representing the most recent transaction that affected this payment channel.
 previousAffectingTransactionLedgerVersion | integer | The ledger version that the transaction identified by the `previousAffectingTransactionID` was validated in.
+previousAffectingTransactionLedgerVersion | string | The ledger version that the transaction identified by the `previousAffectingTransactionID` was validated in.
 cancelAfter | date-time string | *Optional* Time when this channel expires as specified at creation.
 destinationTag | integer | *Optional* Destination tag.
 expiration | date-time string | *Optional* Time when this channel expires.
@@ -2892,6 +3867,7 @@ options | object | *Optional* Options affecting what ledger and how much data to
 *options.* includeState | boolean | *Optional* Return an array of hashes for all state data or an array of all state data in this ledger version, depending on whether `includeAllData` is set.
 *options.* includeTransactions | boolean | *Optional* Return an array of hashes for each transaction or an array of all transactions that were validated in this ledger version, depending on whether `includeAllData` is set.
 *options.* ledgerVersion | integer | *Optional* Get ledger data for this historical ledger version.
+*options.* ledgerVersion | string | *Optional* Get ledger data for this historical ledger version.
 
 ### Return Value
 
@@ -2905,6 +3881,7 @@ closeTimeResolution | integer | Approximate number of seconds between closing on
 closeFlags | integer | A bit-map of flags relating to the closing of this ledger. Currently, the ledger has only one flag defined for `closeFlags`: **sLCF_NoConsensusTime** (value 1). If this flag is enabled, it means that validators were in conflict regarding the correct close time for the ledger, but built otherwise the same ledger, so they declared consensus while "agreeing to disagree" on the close time. In this case, the consensus ledger contains a `closeTime` value that is 1 second after that of the previous ledger. (In this case, there is no official close time, but the actual real-world close time is probably 3-6 seconds later than the specified `closeTime`.)
 ledgerHash | string | Unique identifying hash of the entire ledger.
 ledgerVersion | integer | The ledger version of this ledger.
+ledgerVersion | string | The ledger version of this ledger.
 parentLedgerHash | string | Unique identifying hash of the ledger that came immediately before this one.
 parentCloseTime | date-time string | The time at which the previous ledger was closed.
 totalDrops | [value](#value) | Total number of drops (1/1,000,000th of an XRP) in the network, as a quoted integer. (This decreases as transaction fees cause XRP to be destroyed.)
@@ -2968,6 +3945,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3037,6 +4015,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3104,6 +4083,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3169,6 +4149,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3221,6 +4202,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3284,6 +4266,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3341,6 +4324,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3396,6 +4380,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3453,6 +4438,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3510,6 +4496,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3564,6 +4551,7 @@ instructions | object | The instructions for how to execute the transaction afte
 *instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
 *instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
 *instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
 
 ### Example
 
@@ -3590,9 +4578,185 @@ return api.preparePaymentChannelFund(address, paymentChannelFund).then(prepared 
 ```
 
 
+## prepareCheckCreate
+
+`prepareCheckCreate(address: string, checkCreate: Object, instructions: Object): Promise<Object>`
+
+Prepare a Check creation transaction. The prepared transaction must subsequently be [signed](#sign) and [submitted](#submit).
+
+### Parameters
+
+Name | Type | Description
+---- | ---- | -----------
+address | [address](#address) | The address of the account that is creating the transaction.
+checkCreate | [checkCreate](#check-create) | The specification of the Check create creation to prepare.
+instructions | [instructions](#transaction-instructions) | *Optional* Instructions for executing the transaction
+
+### Return Value
+
+This method returns a promise that resolves with an object with the following structure:
+
+<aside class="notice">
+All "prepare*" methods have the same return type.
+</aside>
+
+Name | Type | Description
+---- | ---- | -----------
+txJSON | string | The prepared transaction in rippled JSON format.
+instructions | object | The instructions for how to execute the transaction after adding automatic defaults.
+*instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
+*instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
+*instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+
+### Example
+
+```javascript
+const address = 'r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59';
+const checkCreate = {
+  "destination": "rsA2LpzuawewSBQXkiju3YQTMzW13pAAdW",
+  "sendMax": {
+    "currency": "XRP",
+    "value": "1"
+  }
+};
+return api.prepareCheckCreate(address, checkCreate).then(prepared =>
+  {/* ... */});
+```
+
+
+```json
+{
+  "txJSON": "{\"Account\":\"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59\",\"TransactionType\":\"CheckCreate\",\"Destination\":\"rsA2LpzuawewSBQXkiju3YQTMzW13pAAdW\",\"SendMax\":\"1000000\",\"Flags\":2147483648,\"LastLedgerSequence\":8820051,\"Sequence\":23,\"Fee\":\"12\"}",
+  "instructions": {
+    "fee": "0.000012",
+    "sequence": 23,
+    "maxLedgerVersion": 8820051
+  }
+}
+```
+
+
+## prepareCheckCancel
+
+`prepareCheckCancel(address: string, checkCancel: Object, instructions: Object): Promise<Object>`
+
+Prepare a Check cancellation transaction. This cancels an unredeemed Check, removing it from the ledger without sending any money. The prepared transaction must subsequently be [signed](#sign) and [submitted](#submit).
+
+### Parameters
+
+Name | Type | Description
+---- | ---- | -----------
+address | [address](#address) | The address of the account that is creating the transaction.
+checkCancel | [checkCancel](#check-cancel) | The specification of the Check cancellation to prepare.
+instructions | [instructions](#transaction-instructions) | *Optional* Instructions for executing the transaction
+
+### Return Value
+
+This method returns a promise that resolves with an object with the following structure:
+
+<aside class="notice">
+All "prepare*" methods have the same return type.
+</aside>
+
+Name | Type | Description
+---- | ---- | -----------
+txJSON | string | The prepared transaction in rippled JSON format.
+instructions | object | The instructions for how to execute the transaction after adding automatic defaults.
+*instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
+*instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
+*instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+
+### Example
+
+```javascript
+const address = 'r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59';
+const checkCancel = {
+  "checkID": "49647F0D748DC3FE26BDACBC57F251AADEFFF391403EC9BF87C97F67E9977FB0"
+};
+return api.prepareCheckCancel(address, checkCancel).then(prepared =>
+  {/* ... */});
+```
+
+
+```json
+{
+  "txJSON": "{\"Account\":\"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59\",\"TransactionType\":\"CheckCancel\",\"CheckID\":\"49647F0D748DC3FE26BDACBC57F251AADEFFF391403EC9BF87C97F67E9977FB0\",\"Flags\":2147483648,\"LastLedgerSequence\":8819954,\"Fee\":\"12\",\"Sequence\":23}",
+  "instructions": {
+    "fee": "0.000012",
+    "sequence": 23,
+    "maxLedgerVersion": 8819954
+  }
+}
+```
+
+
+## prepareCheckCash
+
+`prepareCheckCash(address: string, checkCash: Object, instructions: Object): Promise<Object>`
+
+Prepare a Check cashing transaction. This redeems a Check to receive up to the amount authorized by the corresponding CheckCreate transaction. The prepared transaction must subsequently be [signed](#sign) and [submitted](#submit).
+
+### Parameters
+
+Name | Type | Description
+---- | ---- | -----------
+address | [address](#address) | The address of the account that is creating the transaction.
+checkCash | [checkCash](#check-cash) | The specification of the Check cash to prepare.
+instructions | [instructions](#transaction-instructions) | *Optional* Instructions for executing the transaction
+
+### Return Value
+
+This method returns a promise that resolves with an object with the following structure:
+
+<aside class="notice">
+All "prepare*" methods have the same return type.
+</aside>
+
+Name | Type | Description
+---- | ---- | -----------
+txJSON | string | The prepared transaction in rippled JSON format.
+instructions | object | The instructions for how to execute the transaction after adding automatic defaults.
+*instructions.* fee | [value](#value) | An exact fee to pay for the transaction. See [Transaction Fees](#transaction-fees) for more information.
+*instructions.* sequence | [sequence](#account-sequence-number) | The initiating account's sequence number for this transaction.
+*instructions.* maxLedgerVersion | integer,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+*instructions.* maxLedgerVersion | string,null | The highest ledger version that the transaction can be included in. Set to `null` if there is no maximum.
+
+### Example
+
+```javascript
+const address = 'r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59';
+const checkCash = {
+  "amount": {
+    "currency": "XRP",
+    "value": "1"
+  },
+  "checkID": "838766BA2B995C00744175F69A1B11E32C3DBC40E64801A4056FCBD657F57334"
+};
+return api.prepareCheckCash(address, checkCash).then(prepared =>
+  {/* ... */});
+```
+
+
+```json
+{
+  "txJSON": "{\"Account\":\"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59\",\"TransactionType\":\"CheckCash\",\"CheckID\":\"838766BA2B995C00744175F69A1B11E32C3DBC40E64801A4056FCBD657F57334\",\"Amount\":\"1000000\",\"Flags\":2147483648,\"LastLedgerSequence\":8819954,\"Sequence\":23,\"Fee\":\"12\"}",
+  "instructions": {
+    "fee": "0.000012",
+    "sequence": 23,
+    "maxLedgerVersion": 8819954
+  }
+}
+```
+
+
 ## sign
 
-`sign(txJSON: string, secret: string, options: Object): {signedTransaction: string, id: string}`
+```
+sign(txJSON: string, secret: string, options: Object): {signedTransaction: string, id: string}
+sign(txJSON: string, keypair: Object, options: Object): {signedTransaction: string, id: string}
+```
 
 Sign a prepared transaction. The signed transaction must subsequently be [submitted](#submit).
 
@@ -3601,9 +4765,12 @@ Sign a prepared transaction. The signed transaction must subsequently be [submit
 Name | Type | Description
 ---- | ---- | -----------
 txJSON | string | Transaction represented as a JSON string in rippled format.
-secret | secret string | The secret of the account that is initiating the transaction.
+keypair | object | *Optional* The private and public key of the account that is initiating the transaction. (This field is exclusive with secret).
+*keypair.* privateKey | privateKey | The uppercase hexadecimal representation of the secp256k1 or Ed25519 private key.
+*keypair.* publicKey | publicKey | The uppercase hexadecimal representation of the secp256k1 or Ed25519 public key.
 options | object | *Optional* Options that control the type of signature that will be generated.
 *options.* signAs | [address](#address) | *Optional* The account that the signature should count for in multisigning.
+secret | secret string | *Optional* The secret of the account that is initiating the transaction. (This field is exclusive with keypair).
 
 ### Return Value
 
@@ -3619,7 +4786,8 @@ id | [id](#transaction-id) | The [Transaction ID](#transaction-id) of the signed
 ```javascript
 const txJSON = '{"Flags":2147483648,"TransactionType":"AccountSet","Account":"r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59","Domain":"726970706C652E636F6D","LastLedgerSequence":8820051,"Fee":"12","Sequence":23}';
 const secret = 'shsWGZcmZz6YsWWmcnpfr6fLTdtFV';
-return api.sign(txJSON, secret);
+const keypair = { privateKey: '00ACCD3309DB14D1A4FC9B1DAE608031F4408C85C73EE05E035B7DC8B25840107A', publicKey: '02F89EAEC7667B30F33D0687BBA86C3FE2A08CCA40A9186C5BDE2DAA6FA97A37D8' };
+return api.sign(txJSON, secret); // or: api.sign(txJSON, keypair);
 ```
 
 
@@ -3844,6 +5012,7 @@ ledger | object | The ledger header to hash.
 *ledger.* closeFlags | integer | A bit-map of flags relating to the closing of this ledger. Currently, the ledger has only one flag defined for `closeFlags`: **sLCF_NoConsensusTime** (value 1). If this flag is enabled, it means that validators were in conflict regarding the correct close time for the ledger, but built otherwise the same ledger, so they declared consensus while "agreeing to disagree" on the close time. In this case, the consensus ledger contains a `closeTime` value that is 1 second after that of the previous ledger. (In this case, there is no official close time, but the actual real-world close time is probably 3-6 seconds later than the specified `closeTime`.)
 *ledger.* ledgerHash | string | Unique identifying hash of the entire ledger.
 *ledger.* ledgerVersion | integer | The ledger version of this ledger.
+*ledger.* ledgerVersion | string | The ledger version of this ledger.
 *ledger.* parentLedgerHash | string | Unique identifying hash of the ledger that came immediately before this one.
 *ledger.* parentCloseTime | date-time string | The time at which the previous ledger was closed.
 *ledger.* totalDrops | [value](#value) | Total number of drops (1/1,000,000th of an XRP) in the network, as a quoted integer. (This decreases as transaction fees cause XRP to be destroyed.)
@@ -3896,6 +5065,7 @@ reserveBaseXRP | [value](#value) | The minimum reserve, in XRP, that is required
 reserveIncrementXRP | [value](#value) | The increase in account reserve that is added for each item the account owns, such as offers or trust lines.
 transactionCount | integer | Number of new transactions included in this ledger.
 ledgerVersion | integer | Ledger version of the ledger that closed.
+ledgerVersion | string | Ledger version of the ledger that closed.
 validatedLedgerVersions | string | Range of ledgers that the server has available. This may be discontiguous.
 
 ### Example

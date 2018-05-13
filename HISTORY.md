@@ -1,6 +1,104 @@
 # ripple-lib Release History
 
+## 0.22.0 (2018-05-10)
+
++ [`getOrderbook` - return raw order data](https://github.com/ripple/ripple-lib/pull/886). The full `BookOffer` data is now provided under `data`.
+
+The SHA-256 checksums for the browser version of this release can be found
+below.
+```
+% shasum -a 256 *
+33f71b55c4adec4452826e44fe7809377364df04222b60f0fce01e7de2daff33  ripple-0.22.0-debug.js
+63232888a4ea77065e8e8eb8fdaa8ebfe3a785428fe935e2667c1ea54c837f29  ripple-0.22.0-min.js
+ab98026fabe296bd938297c48cb58e01dfdbe90f3c66c9617d6a3e1efd4c6b93  ripple-0.22.0.js
+```
+
+## 0.21.0 (2018-04-11)
+
++ [Upgrade https-proxy-agent](https://github.com/ripple/ripple-lib/pull/883)
++ [Add getAccountObjects](https://github.com/ripple/ripple-lib/pull/881)
+
+The SHA-256 checksums for the browser version of this release can be found
+below.
+```
+% shasum -a 256 *
+3ab52209ad4a80393c8c08ef3f4aa9cfb47bc76c0ede2ee9fa7f5ca180ba4d67  ripple-0.21.0-debug.js
+3b1efccded347bed5f64757098a1ea6a513bb8932d922d00af47cd24e001dc14  ripple-0.21.0-min.js
+db08e5a3eab1f659b4c803543374398004d950ba720adc4b9a7658817cb5c94b  ripple-0.21.0.js
+```
+
+## 0.20.0 (2018-04-09)
+
++ [Add support for using a keypair with sign()](https://github.com/ripple/ripple-lib/pull/769)
++ [Fix a bug caused by jsonschema v1.2.3 by pinning to v1.2.2](https://github.com/ripple/ripple-lib/pull/882)
++ [Improve Payment Channel documentation](https://github.com/ripple/ripple-lib/pull/877)
+
+The SHA-256 checksums for the browser version of this release can be found
+below.
+```
+% shasum -a 256 *
+389811a9baa72f77e2a43d0b48045762d29a6f616ed5fd2660ba76fc12a3ecc5  ripple-0.20.0-debug.js
+c1746ea0dd55318cb4e1ef3955ef14759d9d70861437c69abafc10169916f068  ripple-0.20.0-min.js
+17958b0e46395d2b2a35a003693c0babdfb5382513d3cc58a62f8648ad710b0e  ripple-0.20.0.js
+```
+
+## 0.19.1 (2018-03-22)
+
++ [Fix: Include TypeScript declarations in npm package](https://github.com/ripple/ripple-lib/pull/863)
++ [Fix: Documentation link to checkCash](https://github.com/ripple/ripple-lib/pull/871)
++ [Internal: Clean up types and migrate more APIs to new request method](https://github.com/ripple/ripple-lib/pull/857)
++ [Internal: Fix Payment source and destination types](https://github.com/ripple/ripple-lib/pull/870)
+
+The SHA-256 checksums for the browser version of this release can be found
+below.
+```
+% shasum -a 256 *
+3ed5332aa035c07bae6c1abfdfc8ca77cdbb05cc4b88878f544f1ea4cb793f4d  ripple-0.19.1-debug.js
+2f5507aa00a40ab6a94de1822af87db5e927edef3885aef5d9b39ccb623ccb54  ripple-0.19.1-min.js
+1e439aee1b220242d56ea687a9b55a67b8614212c1ddbd70a4fcf34503fc487a  ripple-0.19.1.js
+```
+
+## 0.19.0 (2018-03-02)
+
++ [Add support for Checks](https://github.com/ripple/ripple-lib/pull/853)
++ [Add support for the Deposit Authorization account root flag](https://github.com/ripple/ripple-lib/pull/852)
++ [Generate .ts.d TypeScript declaration files](https://github.com/ripple/ripple-lib/pull/851)
++ [Improve documentation of getTransactions params](https://github.com/ripple/ripple-lib/pull/856)
++ [Add new request interface](https://github.com/ripple/ripple-lib/pull/843) (private for now)
+
+The SHA-256 checksums for the browser version of this release can be found
+below.
+```
+% shasum -a 256 *
+0e7ce4594b7e455fbc57ad81f6fddc391d1e1f349a49c96ad783be50f80fdc14  ripple-0.19.0-debug.js
+6d716a0357929e51e476f22136880f7a0e5458fd396ac145ce9308f278ff7cc1  ripple-0.19.0-min.js
+6715db1af638f99226ab7f8f244103306aa6e04d1b8c1da47a63431053bacb84  ripple-0.19.0.js
+```
+
+## 0.18.2 (2018-02-13)
+
++ [Fix: Publish updated browser builds to npm so that users can easily use
+  CDNs](https://github.com/ripple/ripple-lib/pull/849)
++ [Fix: Browserify fails due to dependency on `ws`](https://github.com/ripple/ripple-lib/pull/847)
++ [Fix: `build` script fails when `node_modules` is in path](https://github.com/ripple/ripple-lib/pull/846)
++ [Reduce size of published npm package](https://github.com/ripple/ripple-lib/commit/0c318816ccf25c4c3932934a35ef903cc552edc1)
++ Clean up files from Flow (we migrated to TypeScript)
++ Typos and code cleanup
+
+The SHA-256 checksums for the browser version of this release can be found
+below.
+```
+% shasum -a 256 *
+f08ab61137255be3639e9d210ded2a182b6e0388f257a70d9b372ce7e7e518a6  ripple-0.18.2-debug.js
+0604835b8421391167b4314ce93a76b5994780a08bd7edf36d91eb5e8f2643a2  ripple-0.18.2-min.js
+fda56ab5c8256e04355e20064877ef4053f26c87f37cfcf861340f22bf89ee40  ripple-0.18.2.js
+```
+
 ## 0.18.1 (2018-01-27)
+
+Note: The package published to npm for this version did not include updated
+browser builds. If you are using a CDN that pulls from npm, please use 0.18.2 or
+later.
 
 + [Fix: isSameIssue() should check counterparty](https://github.com/ripple/ripple-lib/pull/836). This bug caused `getOrderbook()` to return incorrect values.
 
@@ -137,7 +235,6 @@ __OTHER CHANGES__
 __BREAKING CHANGES__
 + Add new RippleAPI interface and delete old API
     - [RippleAPI README and samples](https://github.com/ripple/ripple-lib/tree/develop/docs/samples)
-    - [Method documentation](https://rawgit.com/ripple/ripple-lib/develop/docs/api.html)
 
 __OTHER CHANGES__
 + [Removed timeout method of Request and added default timeout](https://github.com/ripple/ripple-lib/commit/634fe5683a9082e57682ff7d5c4fb9483b4af818)
